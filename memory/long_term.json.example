@@ -1,0 +1,19 @@
+{
+  "identity": {
+    "name": {
+      "value": "Sir",
+      "updated": "2026-01-01"
+    },
+    "language": {
+      "value": "English",
+      "updated": "2026-01-01"
+    }
+  },
+  "preferences": {},
+  "projects": {},
+  "relationships": {},
+  "wishes": {},
+  "notes": {},
+  "sessions": [],
+  "monitors": {}
+}
