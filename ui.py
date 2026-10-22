@@ -4254,6 +4254,77 @@ class RemoteKeyOverlay(QWidget):
         self.closed.emit()
 
 
+class MiniAssistantWindow(QWidget):
+    """Compact, draggable, always-on-top companion shown while the main HUD is hidden."""
+
+    def __init__(self, assistant_name: str, on_restore):
+        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint |
+                         Qt.WindowType.WindowStaysOnTopHint)
+        self._on_restore = on_restore
+        self.setObjectName("MiniAssistantWindow")
+        self.setWindowTitle(f"{assistant_name} — Mini")
+        self.setFixedSize(340, 142)
+        self.setStyleSheet("""
+            QWidget#MiniAssistantWindow { background: #04101f; color: #dffaff;
+                border: 1px solid #00bcd4; border-radius: 12px; }
+            QLabel { background: transparent; border: none; }
+            QPushButton { color: #dffaff; background: #08253a;
+                border: 1px solid #12617a; border-radius: 6px;
+                padding: 6px 10px; font-weight: bold; }
+            QPushButton:hover { background: #0b3b53; border-color: #00e5ff; }
+        """)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(14, 10, 14, 12)
+        root.setSpacing(8)
+        top = QHBoxLayout()
+        title = QLabel(f"◈  {assistant_name.upper()}")
+        title.setStyleSheet("color: #00e5ff; font: bold 13px 'Courier New';")
+        top.addWidget(title)
+        top.addStretch()
+        restore = QPushButton("OPEN HUD")
+        restore.setToolTip("Restore the full assistant window")
+        restore.clicked.connect(self._restore)
+        top.addWidget(restore)
+        root.addLayout(top)
+        desc = QLabel("MINI MODE  •  ALWAYS ON TOP")
+        desc.setStyleSheet("color: #58a8c0; font: 10px 'Courier New';")
+        root.addWidget(desc)
+        bottom = QHBoxLayout()
+        hint = QLabel("Click OPEN HUD to return to the full interface.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #9abac8; font-size: 10px;")
+        bottom.addWidget(hint, 1)
+        icon = QPushButton("↗")
+        icon.setFixedWidth(36)
+        icon.setToolTip("Restore full window")
+        icon.clicked.connect(self._restore)
+        bottom.addWidget(icon)
+        root.addLayout(bottom)
+        self._drag_offset = None
+
+    def _restore(self):
+        self.hide()
+        self._on_restore()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        event.accept()
+
+    def closeEvent(self, event):
+        self._restore()
+        event.accept()
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
@@ -4278,6 +4349,10 @@ class MainWindow(QMainWindow):
     def __init__(self, face_path: str):
         super().__init__()
         self._face_path = face_path
+        self._mini_window: MiniAssistantWindow | None = None
+        self._pre_mini_geometry = None
+        self._mini_shortcut = QShortcut(QKeySequence("Ctrl+M"), self)
+        self._mini_shortcut.activated.connect(self._enter_mini_mode)
 
         # Load customization from config
         _cfg = _read_full_config()
@@ -5247,6 +5322,36 @@ class MainWindow(QMainWindow):
             self._proc_lbl.setText("PROC  --")
 
 
+    def _enter_mini_mode(self):
+        """Hide the full HUD and show a compact floating assistant window."""
+        if self._mini_window is not None and self._mini_window.isVisible():
+            self._mini_window.raise_()
+            self._mini_window.activateWindow()
+            return
+        self._pre_mini_geometry = self.saveGeometry()
+        if self._mini_window is None:
+            self._mini_window = MiniAssistantWindow(self._assistant_name, self._restore_from_mini)
+        screen = QApplication.primaryScreen()
+        if screen:
+            area = screen.availableGeometry()
+            self._mini_window.move(area.right() - self._mini_window.width() - 24,
+                                   area.bottom() - self._mini_window.height() - 24)
+        self._mini_window.show()
+        self._mini_window.raise_()
+        self.hide()
+
+    def _restore_from_mini(self):
+        """Restore the main HUD to its previous geometry."""
+        self.showNormal()
+        if self._pre_mini_geometry:
+            try:
+                self.restoreGeometry(self._pre_mini_geometry)
+            except Exception:
+                pass
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
     def _build_header(self) -> QWidget:
         w = QWidget()
         w.setFixedHeight(54)
@@ -5300,12 +5405,25 @@ class MainWindow(QMainWindow):
 
         mid = QVBoxLayout(); mid.setSpacing(1)
         _disp = self._assistant_name.upper()
+        self._mini_btn = QPushButton("▣ MINI")
+        self._mini_btn.setFixedHeight(28)
+        self._mini_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mini_btn.setToolTip("Switch to a compact floating assistant (Ctrl+M)")
+        self._mini_btn.setStyleSheet(f"""
+            QPushButton {{ color: {C.PRI}; background: {C.PRI_GHO};
+                border: 1px solid {C.BORDER_B}; border-radius: 5px;
+                padding: 0 9px; font: bold 8pt 'Courier New'; }}
+            QPushButton:hover {{ background: {C.PANEL2}; border-color: {C.PRI}; }}
+        """)
+        self._mini_btn.clicked.connect(self._enter_mini_mode)
+        lay.addWidget(self._mini_btn)
+
         self._title_lbl = QLabel(_disp)
         self._title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_lbl.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
         self._title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         mid.addWidget(self._title_lbl)
-        _sub_text = "STARK INDUSTRIES // MARK LVI ARC REACTOR HUD"
+        _sub_text = "JARVIS DESKTOP AI // FLOATING ASSISTANT"
         self._sub_lbl = QLabel(_sub_text)
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._sub_lbl.setFont(QFont("Courier New", 7))
