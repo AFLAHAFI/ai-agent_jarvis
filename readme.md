@@ -32,14 +32,19 @@ Beyond conversation, MARK LVI acts as an autonomous digital agent capable of per
   * **Listening / Thinking / Idle:** Seamlessly transitions into a pulsing, sound-reactive **10-Coil Electromagnetic Stark Arc Reactor**.
 * **Audio-Reactive Waveforms:** Real-time software rendering with ambient halo glow and cybernetic telemetry HUD.
 
-### 2. 🖐️ Optical Hand Tracking & Gesture Mouse Control (`actions/hand_mouse.py`)
+### 2. 📱 Mini Assistant Floating HUD Mode (Ctrl+M)
+* **Compact Multitasking Widget:** Click **▣ MINI** in the header or press **Ctrl+M** to collapse the full HUD into a sleek, frameless, draggable, always-on-top companion widget (320×110 px).
+* **Live Status Telemetry:** Reflects current assistant state (● LISTENING in green, ● SPEAKING in cyan, ◈ THINKING in amber).
+* **Instant One-Click Restoration:** Click **OPEN HUD ↗** or press **Ctrl+M** anytime to restore the full Stark Arc Reactor HUD to its exact previous window position and geometry.
+
+### 3.. 🖐️ Optical Hand Tracking & Gesture Mouse Control (`actions/hand_mouse.py`)
 * Powered by **Google MediaPipe HandLandmarker** (21 3D joint landmarks).
 * **Pointer Navigation:** Point your index finger to guide the cursor smoothly across the screen with Exponential Moving Average (EMA) jitter suppression.
 * **Pinch-to-Click & Drag:** Pinch your index finger and thumb together (< 0.05 normalized distance) to trigger left-click or drag-and-drop windows and files.
 * **Right-Click:** Pinch middle finger and thumb together.
 * **Voice Toggle:** Activated instantly via *"Enable hand tracking"* or *"Disable hand tracking"*.
 
-### 3. 🎨 Autonomous MS Paint Live Speed-Drawing (`actions/creative_agent.py`)
+### 7. 🎨 Autonomous MS Paint Live Speed-Drawing (`actions/creative_agent.py`)
 * Fully dynamic vector art synthesis for **ANY** subject requested by voice (humans, cats, cars, houses, landscapes, etc.) via Gemini FAST.
 * **Physical Mouse Execution:** Opens MS Paint, maximizes it, and physically maneuvers the mouse across the canvas live on screen, rendering continuous bezier-like strokes in real-time.
 * **Safe-Bounds Protection:** Ensures drawing is strictly contained inside the canvas sheet without touching toolbars or system controls.

@@ -4254,6 +4254,108 @@ class RemoteKeyOverlay(QWidget):
         self.closed.emit()
 
 
+class MiniAssistantWindow(QWidget):
+    """Compact, draggable, always-on-top companion HUD shown while main window is in mini mode."""
+
+    def __init__(self, assistant_name: str, on_restore):
+        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint |
+                         Qt.WindowType.WindowStaysOnTopHint)
+        self._on_restore = on_restore
+        self.setObjectName("MiniAssistantWindow")
+        self.setWindowTitle(f"{assistant_name} — Mini HUD")
+        self.setFixedSize(320, 110)
+        self.setStyleSheet(f"""
+            QWidget#MiniAssistantWindow {{
+                background: #030a16;
+                color: {C.PRI};
+                border: 1px solid {C.PRI};
+                border-radius: 10px;
+            }}
+            QLabel {{ background: transparent; border: none; }}
+            QPushButton {{
+                color: {C.PRI};
+                background: #081d30;
+                border: 1px solid {C.BORDER_B};
+                border-radius: 5px;
+                padding: 4px 10px;
+                font: bold 9pt 'Courier New';
+            }}
+            QPushButton:hover {{
+                background: {C.PANEL2};
+                border-color: {C.PRI};
+            }}
+        """)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12, 10, 12, 10)
+        root.setSpacing(6)
+
+        top = QHBoxLayout()
+        title = QLabel(f"◈ {assistant_name.upper()} MINI")
+        title.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {C.PRI};")
+        top.addWidget(title)
+        top.addStretch()
+
+        restore = QPushButton("OPEN HUD ↗")
+        restore.setCursor(Qt.CursorShape.PointingHandCursor)
+        restore.setToolTip("Restore full Stark Arc Reactor HUD (Ctrl+M)")
+        restore.clicked.connect(self._restore)
+        top.addWidget(restore)
+        root.addLayout(top)
+
+        # Dynamic Status Line
+        self._status_lbl = QLabel("●  READY")
+        self._status_lbl.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        self._status_lbl.setStyleSheet(f"color: {C.GREEN};")
+        root.addWidget(self._status_lbl)
+
+        # Hint Line
+        bot = QHBoxLayout()
+        hint = QLabel("DRAG TO MOVE  •  ALWAYS ON TOP")
+        hint.setFont(QFont("Courier New", 7))
+        hint.setStyleSheet(f"color: {C.PRI_DIM};")
+        bot.addWidget(hint, 1)
+        root.addLayout(bot)
+        self._drag_offset = None
+
+    def set_state(self, state: str):
+        st = (state or "READY").upper()
+        if st == "SPEAKING":
+            self._status_lbl.setText("●  SPEAKING")
+            self._status_lbl.setStyleSheet(f"color: {C.ACC};")
+        elif st in ("THINKING", "PROCESSING"):
+            self._status_lbl.setText("◈  THINKING...")
+            self._status_lbl.setStyleSheet(f"color: {C.ACC2};")
+        elif st == "LISTENING":
+            self._status_lbl.setText("●  LISTENING")
+            self._status_lbl.setStyleSheet(f"color: {C.GREEN};")
+        else:
+            self._status_lbl.setText(f"○  {st}")
+            self._status_lbl.setStyleSheet(f"color: {C.PRI};")
+
+    def _restore(self):
+        self.hide()
+        self._on_restore()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        event.accept()
+
+    def closeEvent(self, event):
+        self._restore()
+        event.accept()
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
@@ -4278,6 +4380,10 @@ class MainWindow(QMainWindow):
     def __init__(self, face_path: str):
         super().__init__()
         self._face_path = face_path
+        self._mini_window: MiniAssistantWindow | None = None
+        self._pre_mini_geometry = None
+        self._mini_shortcut = QShortcut(QKeySequence("Ctrl+M"), self)
+        self._mini_shortcut.activated.connect(self._enter_mini_mode)
 
         # Load customization from config
         _cfg = _read_full_config()
@@ -5247,6 +5353,37 @@ class MainWindow(QMainWindow):
             self._proc_lbl.setText("PROC  --")
 
 
+    def _enter_mini_mode(self):
+        """Hide the full HUD and show a compact floating assistant window."""
+        if self._mini_window is not None and self._mini_window.isVisible():
+            self._mini_window.raise_()
+            self._mini_window.activateWindow()
+            return
+        self._pre_mini_geometry = self.saveGeometry()
+        if self._mini_window is None:
+            self._mini_window = MiniAssistantWindow(self._assistant_name, self._restore_from_mini)
+        self._mini_window.set_state(self.hud.state)
+        screen = QApplication.primaryScreen()
+        if screen:
+            area = screen.availableGeometry()
+            self._mini_window.move(area.right() - self._mini_window.width() - 24,
+                                   area.bottom() - self._mini_window.height() - 24)
+        self._mini_window.show()
+        self._mini_window.raise_()
+        self.hide()
+
+    def _restore_from_mini(self):
+        """Restore the main HUD to its previous geometry."""
+        self.showNormal()
+        if self._pre_mini_geometry:
+            try:
+                self.restoreGeometry(self._pre_mini_geometry)
+            except Exception:
+                pass
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
     def _build_header(self) -> QWidget:
         w = QWidget()
         w.setFixedHeight(54)
@@ -5296,6 +5433,20 @@ class MainWindow(QMainWindow):
         self._ctrl_btn.clicked.connect(self._toggle_controls)
         lay.addSpacing(4)
         lay.addWidget(self._ctrl_btn)
+        lay.addSpacing(6)
+
+        self._mini_btn = QPushButton("▣ MINI")
+        self._mini_btn.setFixedHeight(26)
+        self._mini_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mini_btn.setToolTip("Compact Floating Mode (Ctrl+M)")
+        self._mini_btn.setStyleSheet(f"""
+            QPushButton {{ color: {C.PRI}; background: {C.PRI_GHO};
+                border: 1px solid {C.BORDER_B}; border-radius: 4px;
+                padding: 0 8px; font: bold 8pt 'Courier New'; }}
+            QPushButton:hover {{ background: {C.PANEL2}; border-color: {C.PRI}; }}
+        """)
+        self._mini_btn.clicked.connect(self._enter_mini_mode)
+        lay.addWidget(self._mini_btn)
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(1)
@@ -6960,6 +7111,8 @@ class MainWindow(QMainWindow):
     def _apply_state(self, state: str):
         self.hud.state    = state
         self.hud.speaking = (state == "SPEAKING")
+        if self._mini_window is not None and self._mini_window.isVisible():
+            self._mini_window.set_state(state)
 
     def _check_config(self) -> bool:
         if not API_FILE.exists(): return False
