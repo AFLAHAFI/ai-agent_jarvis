@@ -7,5 +7,7 @@
   "user_name": "Sir",
   "ui_color": "#00f0ff",
   "camera_index": 0,
-  "hud_style": "hybrid"
+  "hud_style": "hybrid",
+  "user_email": "user@example.com",
+  "morning_brief_enabled": true
 }

@@ -154,6 +154,8 @@ For full platform-specific instructions, see the [📖 Detailed Setup Guide](SET
 | **Reminders** | *"Remind me to drink water in 10 minutes"* |
 | **System Maintenance** | *"Clean temporary files"* / *"Empty recycle bin"* |
 | **WhatsApp** | *"Send a WhatsApp message to [Contact/Number]"* |
+| **Gmail** | *"Check my unread emails"* / *"Open Gmail"* / *"Send an email"* |
+| **Daily Briefing** | *"Good morning Jarvis"* / *"Give me today's briefing"* / *"What's the news today?"* |
 | **Vision Analysis** | *"What's on my screen right now?"* / *"Look at this"* |
 
 ---
