@@ -76,6 +76,7 @@ class HandMouseController:
         self.thread: Optional[threading.Thread] = None
         self.camera_index = _load_camera_index()
         self.screen_w, self.screen_h = pyautogui.size()
+        self.cap = None
 
         # Smoothing & Calibration
         self.alpha = 0.35  # EMA factor for responsive, smooth motion
@@ -98,6 +99,11 @@ class HandMouseController:
             self.running = True
             self.thread = threading.Thread(target=self._run_loop, name="HandMouseThread", daemon=True)
             self.thread.start()
+            if _ui_ref:
+                try:
+                    _ui_ref.show_gesture_hud()
+                except Exception:
+                    pass
             return True, "Hand tracking mouse control started successfully."
 
     def stop(self) -> tuple[bool, str]:
@@ -105,12 +111,29 @@ class HandMouseController:
             if not self.running:
                 return True, "Hand tracking is not currently running."
             self.running = False
+            if _ui_ref:
+                try:
+                    _ui_ref.hide_gesture_hud()
+                except Exception:
+                    pass
             if self.is_pinching:
                 try:
                     pyautogui.mouseUp(button="left")
                 except Exception:
                     pass
                 self.is_pinching = False
+                if _ui_ref:
+                    try:
+                        _ui_ref.set_gesture_pinching(False)
+                    except Exception:
+                        pass
+            # Force immediate camera release to unblock cap.read()
+            if self.cap is not None:
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                self.cap = None
             return True, "Hand tracking mouse control stopped."
 
     def _run_loop(self) -> None:
@@ -141,9 +164,11 @@ class HandMouseController:
             return
 
         cap = cv2.VideoCapture(self.camera_index)
+        self.cap = cap
         if not cap.isOpened():
             print(f"[HandMouse] ⚠️ Could not open camera {self.camera_index}")
             self.running = False
+            self.cap = None
             return
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -244,6 +269,11 @@ class HandMouseController:
                             winsound.MessageBeep(winsound.MB_ICONASTERISK)
                             self.is_pinching = True
                             self.last_click_time = time.time()
+                            if _ui_ref:
+                                try:
+                                    _ui_ref.set_gesture_pinching(True)
+                                except Exception:
+                                    pass
                         except Exception as e:
                             print(f"[HandMouse] Mouse down error: {e}")
                 elif pinch_ratio > 0.48:
@@ -251,6 +281,11 @@ class HandMouseController:
                         try:
                             pyautogui.mouseUp(button="left")
                             self.is_pinching = False
+                            if _ui_ref:
+                                try:
+                                    _ui_ref.set_gesture_pinching(False)
+                                except Exception:
+                                    pass
                         except Exception as e:
                             print(f"[HandMouse] Mouse up error: {e}")
 
@@ -280,10 +315,20 @@ class HandMouseController:
                     except Exception:
                         pass
                     self.is_pinching = False
+                    if _ui_ref:
+                        try:
+                            _ui_ref.set_gesture_pinching(False)
+                        except Exception:
+                            pass
 
             time.sleep(0.016)  # ~60 fps cap
 
-        cap.release()
+        if cap and cap.isOpened():
+            try:
+                cap.release()
+            except Exception:
+                pass
+        self.cap = None
         if self.is_pinching:
             try:
                 pyautogui.mouseUp(button="left")
@@ -293,6 +338,13 @@ class HandMouseController:
 
 
 _controller = HandMouseController()
+_ui_ref = None
+
+
+def bind_ui(ui) -> None:
+    """Binds the main UI instance for floating Stark gesture HUD notifications."""
+    global _ui_ref
+    _ui_ref = ui
 
 
 def hand_mouse(
@@ -345,7 +397,8 @@ TOOL = {
         "Pinch middle finger and thumb for right-click. "
         "Use action='enable' when the user asks to control the mouse with hand gestures, "
         "turn on hand tracking, or enable hand mouse. "
-        "Use action='disable' when the user asks to turn off, disable, or stop hand tracking."
+        "Use action='disable' whenever the user asks to turn off, disable, or stop hand tracking, "
+        "stop hand mouse, close hand camera, or turn off gesture mouse (in English or Malayalam: 'ഹാൻഡ് ഓഫ് ചെയ്യൂ', 'ഡിസേബിൾ ചെയ്യൂ')."
     ),
     "parameters": {
         "type": "OBJECT",

@@ -4356,6 +4356,61 @@ class MiniAssistantWindow(QWidget):
         event.accept()
 
 
+class FloatingGestureWidget(QWidget):
+    """Floating transparent Stark HUD pill shown while hand-tracking mouse is active."""
+
+    def __init__(self, parent=None):
+        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint |
+                         Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setObjectName("FloatingGestureWidget")
+        self.setFixedSize(230, 46)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 6, 12, 6)
+        lay.setSpacing(8)
+
+        self._icon_lbl = QLabel("⚛")
+        self._icon_lbl.setFont(QFont("Segoe UI Symbol", 14))
+        self._icon_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        lay.addWidget(self._icon_lbl)
+
+        mid_lay = QVBoxLayout()
+        mid_lay.setSpacing(1)
+
+        self._title_lbl = QLabel("GESTURE MOUSE")
+        self._title_lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        mid_lay.addWidget(self._title_lbl)
+
+        self._status_lbl = QLabel("● ACTIVE (POINT & PINCH)")
+        self._status_lbl.setFont(QFont("Courier New", 7))
+        self._status_lbl.setStyleSheet("color: #00f0ff; background: transparent;")
+        mid_lay.addWidget(self._status_lbl)
+
+        lay.addLayout(mid_lay)
+        lay.addStretch()
+
+        self.setStyleSheet(f"""
+            QWidget#FloatingGestureWidget {{
+                background: rgba(3, 10, 22, 220);
+                border: 1px solid {C.PRI};
+                border-radius: 8px;
+            }}
+        """)
+
+    def set_pinching(self, is_pinching: bool):
+        if is_pinching:
+            self._icon_lbl.setStyleSheet("color: #00ff88; background: transparent;")
+            self._status_lbl.setText("● [PINCH CLICK]")
+            self._status_lbl.setStyleSheet("color: #00ff88; font-weight: bold; background: transparent;")
+        else:
+            self._icon_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+            self._status_lbl.setText("● ACTIVE (POINT & PINCH)")
+            self._status_lbl.setStyleSheet("color: #00f0ff; background: transparent;")
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
@@ -4376,14 +4431,21 @@ class MainWindow(QMainWindow):
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
     _bring_to_front_sig = pyqtSignal()  # bring JARVIS to foreground
+    _gesture_hud_show_sig = pyqtSignal()
+    _gesture_hud_hide_sig = pyqtSignal()
+    _gesture_hud_pinch_sig = pyqtSignal(bool)
 
     def __init__(self, face_path: str):
         super().__init__()
         self._face_path = face_path
         self._mini_window: MiniAssistantWindow | None = None
+        self._gesture_hud: FloatingGestureWidget | None = None
         self._pre_mini_geometry = None
         self._mini_shortcut = QShortcut(QKeySequence("Ctrl+M"), self)
         self._mini_shortcut.activated.connect(self._enter_mini_mode)
+        self._gesture_hud_show_sig.connect(self._show_gesture_hud)
+        self._gesture_hud_hide_sig.connect(self._hide_gesture_hud)
+        self._gesture_hud_pinch_sig.connect(self._pinch_gesture_hud)
 
         # Load customization from config
         _cfg = _read_full_config()
@@ -5373,7 +5435,12 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def _restore_from_mini(self):
-        """Restore the main HUD to its previous geometry."""
+        """Restore the main HUD to its previous geometry and resume painting."""
+        if self._mini_window is not None:
+            try:
+                self._mini_window.hide()
+            except Exception:
+                pass
         self.showNormal()
         if self._pre_mini_geometry:
             try:
@@ -5383,6 +5450,32 @@ class MainWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
+        try:
+            self.hud.update()
+            self.update()
+        except Exception:
+            pass
+
+    def _show_gesture_hud(self):
+        """Show compact floating gesture status pill in top right corner."""
+        if self._gesture_hud is None:
+            self._gesture_hud = FloatingGestureWidget()
+        screen = QApplication.primaryScreen()
+        if screen:
+            area = screen.availableGeometry()
+            self._gesture_hud.move(area.right() - self._gesture_hud.width() - 24, 36)
+        self._gesture_hud.show()
+        self._gesture_hud.raise_()
+
+    def _hide_gesture_hud(self):
+        """Hide gesture status pill."""
+        if self._gesture_hud is not None:
+            self._gesture_hud.hide()
+
+    def _pinch_gesture_hud(self, is_pinching: bool):
+        """Update live pinch status on floating widget."""
+        if self._gesture_hud is not None and self._gesture_hud.isVisible():
+            self._gesture_hud.set_pinching(is_pinching)
 
     def _build_header(self) -> QWidget:
         w = QWidget()
@@ -6030,6 +6123,11 @@ class MainWindow(QMainWindow):
     def _bring_to_front(self):
         """Slot — Qt main thread. Reliably brings JARVIS window to the front over other apps."""
         try:
+            # If currently in Mini Assistant mode, cleanly restore full HUD
+            if self._mini_window is not None and self._mini_window.isVisible():
+                self._restore_from_mini()
+                return
+
             if sys.platform == "win32":
                 import win32gui, win32con, win32process
                 import ctypes
@@ -7224,6 +7322,27 @@ class JarvisUI:
         """Thread-safe: bring JARVIS window to the front over other apps."""
         try:
             self._win._bring_to_front_sig.emit()
+        except Exception:
+            pass
+
+    def show_gesture_hud(self):
+        """Thread-safe: display floating gesture status pill."""
+        try:
+            self._win._gesture_hud_show_sig.emit()
+        except Exception:
+            pass
+
+    def hide_gesture_hud(self):
+        """Thread-safe: hide floating gesture status pill."""
+        try:
+            self._win._gesture_hud_hide_sig.emit()
+        except Exception:
+            pass
+
+    def set_gesture_pinching(self, is_pinching: bool):
+        """Thread-safe: update live pinch click status on floating gesture pill."""
+        try:
+            self._win._gesture_hud_pinch_sig.emit(is_pinching)
         except Exception:
             pass
 

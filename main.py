@@ -592,6 +592,11 @@ class JarvisLive:
         # reconnect: a dropped connection is not news about Wayland.
         self._platform_notes_shown = False
         self.ui             = ui
+        try:
+            from actions.hand_mouse import bind_ui as bind_hand_mouse_ui
+            bind_hand_mouse_ui(ui)
+        except Exception:
+            pass
         self._asst_name     = "JARVI    S"   # updated each session from config
         self.session              = None
         self.audio_in_queue       = None
@@ -1394,7 +1399,13 @@ class JarvisLive:
 
             elif name == "close_camera":
                 self.ui.stop_camera_stream()
-                result = "Camera closed."
+                try:
+                    from actions.hand_mouse import _controller
+                    if _controller.is_active():
+                        _controller.stop()
+                except Exception:
+                    pass
+                result = "Camera and hand tracking closed."
 
             elif name == "system_status":
                 r = await loop.run_in_executor(None, get_system_status)

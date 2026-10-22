@@ -222,12 +222,67 @@ def _press(key: str) -> str:
     return f"Pressed: {key}"
 
 
-def _scroll(direction: str = "down", amount: int = 3) -> str:
+def _scroll(direction: str = "down", amount: int | str = 3, target: str | None = None) -> str:
     _require_pyautogui()
-    vertical   = direction in ("up", "down")
-    clicks     = amount if direction in ("up", "right") else -amount
-    pyautogui.scroll(clicks) if vertical else pyautogui.hscroll(clicks)
-    return f"Scrolled {direction} ×{amount}"
+    dir_clean = str(direction).lower().strip()
+
+    # 1. Target pane / container positioning (e.g. WhatsApp messages vs chats)
+    if target:
+        t_clean = str(target).lower().strip()
+        try:
+            import pygetwindow as gw
+            active_wins = gw.getActiveWindow()
+            if active_wins:
+                w_left, w_top, w_w, w_h = active_wins.left, active_wins.top, active_wins.width, active_wins.height
+                if any(k in t_clean for k in ("message", "conversation", "chat_history", "right")):
+                    pyautogui.moveTo(w_left + int(w_w * 0.65), w_top + int(w_h * 0.50))
+                    time.sleep(0.1)
+                elif any(k in t_clean for k in ("chat_list", "contact", "left")):
+                    pyautogui.moveTo(w_left + int(w_w * 0.25), w_top + int(w_h * 0.50))
+                    time.sleep(0.1)
+        except Exception:
+            pass
+
+    # 2. Top / Bottom shortcut jumps
+    if dir_clean in ("top", "all_top", "to_top"):
+        select_key = "command" if _get_os() == "mac" else "ctrl"
+        pyautogui.hotkey(select_key, "home")
+        return "Scrolled all the way to top"
+    if dir_clean in ("bottom", "all_bottom", "to_bottom"):
+        select_key = "command" if _get_os() == "mac" else "ctrl"
+        pyautogui.hotkey(select_key, "end")
+        return "Scrolled all the way to bottom"
+
+    # 3. Dynamic unit scaling for noticeable, smooth scrolling on Windows
+    multiplier = 180 if _get_os() == "windows" else 50
+    amt_str = str(amount).lower().strip()
+
+    if amt_str in ("little", "bit", "slight", "small", "കുറച്ച്", "ഇത്തിരി"):
+        clicks = 250
+    elif amt_str in ("page", "half_page", "more", "കൂടുതൽ"):
+        clicks = 1200
+    elif amt_str in ("full", "max", "screen"):
+        clicks = 2500
+    else:
+        try:
+            num = int(float(amt_str))
+            clicks = num * multiplier if num <= 20 else num
+        except ValueError:
+            clicks = 600
+
+    if dir_clean in ("down", "bottom", "dn"):
+        pyautogui.scroll(-abs(clicks))
+        return f"Scrolled down by {clicks} units"
+    elif dir_clean in ("up", "top"):
+        pyautogui.scroll(abs(clicks))
+        return f"Scrolled up by {clicks} units"
+    elif dir_clean in ("right", "left"):
+        h_clicks = clicks if dir_clean == "right" else -clicks
+        pyautogui.hscroll(h_clicks)
+        return f"Scrolled {dir_clean} by {clicks} units"
+
+    pyautogui.scroll(-abs(clicks))
+    return f"Scrolled down by {clicks} units"
 
 
 def _move(x: int, y: int, duration: float = 0.3) -> str:
@@ -658,7 +713,8 @@ def computer_control(
         if action == "scroll":
             return _scroll(
                 direction=params.get("direction", "down"),
-                amount=int(params.get("amount", 3)),
+                amount=params.get("amount", 3),
+                target=params.get("target") or params.get("pane") or params.get("description"),
             )
 
         if action == "copy":
@@ -792,11 +848,15 @@ TOOL = {
             },
             "direction": {
                 "type": "STRING",
-                "description": "up | down | left | right"
+                "description": "up | down | left | right | top | bottom"
             },
             "amount": {
-                "type": "INTEGER",
-                "description": "Scroll amount (default: 3)"
+                "type": "STRING",
+                "description": "Scroll amount or magnitude: 'little' | 'normal' | 'page' | 'full' or an integer"
+            },
+            "target": {
+                "type": "STRING",
+                "description": "Optional pane or container to hover before scrolling: 'messages' (for WhatsApp chat messages), 'chats' (for WhatsApp chat list), 'left', or 'right'"
             },
             "seconds": {
                 "type": "NUMBER",
