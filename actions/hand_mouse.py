@@ -179,15 +179,27 @@ class HandMouseController:
                 landmarks = detection_result.hand_landmarks[0]
 
                 # Key landmarks:
-                # 4 = Thumb tip, 8 = Index finger tip, 12 = Middle finger tip
+                # 0 = Wrist, 4 = Thumb tip, 5 = Index MCP (base), 8 = Index tip, 12 = Middle tip
+                wrist = landmarks[0]
                 thumb = landmarks[4]
+                index_mcp = landmarks[5]
                 index = landmarks[8]
                 middle = landmarks[12]
 
-                # 1. Cursor Navigation (Index Finger Tip)
+                # Calculate Palm Scale (Wrist to Index MCP base)
+                # This normalizes all distances according to how close/far the hand is from the camera
+                palm_scale = math.hypot(index_mcp.x - wrist.x, index_mcp.y - wrist.y)
+                if palm_scale < 0.03:
+                    palm_scale = 0.03
+
+                # 1. Cursor Navigation with Blend Anchor (Index Tip + Index MCP)
+                # Blending prevents the cursor from jumping downwards when pinching
+                aim_x = (index.x * 0.70) + (index_mcp.x * 0.30)
+                aim_y = (index.y * 0.70) + (index_mcp.y * 0.30)
+
                 # Normalize within active margins
-                norm_x = (index.x - margin_x_min) / (margin_x_max - margin_x_min)
-                norm_y = (index.y - margin_y_min) / (margin_y_max - margin_y_min)
+                norm_x = (aim_x - margin_x_min) / (margin_x_max - margin_x_min)
+                norm_y = (aim_y - margin_y_min) / (margin_y_max - margin_y_min)
 
                 # Clamp 0.0 to 1.0
                 norm_x = max(0.0, min(1.0, norm_x))
@@ -196,19 +208,36 @@ class HandMouseController:
                 target_x = norm_x * self.screen_w
                 target_y = norm_y * self.screen_h
 
-                # Exponential smoothing
-                self.curr_x = (self.alpha * target_x) + ((1.0 - self.alpha) * self.curr_x)
-                self.curr_y = (self.alpha * target_y) + ((1.0 - self.alpha) * self.curr_y)
+                # Adaptive Jitter Filtering & Stabilization
+                dist_delta = math.hypot(target_x - self.curr_x, target_y - self.curr_y)
+
+                # Deadband: filter tiny hand micro-jitters (< 2.0 pixels)
+                if dist_delta < 2.0:
+                    target_x = self.curr_x
+                    target_y = self.curr_y
+
+                if self.is_pinching:
+                    # Pinch-lock: Damp position heavily during clicks to prevent slipping off targets
+                    effective_alpha = 0.10
+                else:
+                    # Dynamic responsiveness: steady aim at slow speeds, fast tracking when sweeping
+                    effective_alpha = min(0.55, max(0.18, dist_delta / 320.0))
+
+                self.curr_x = (effective_alpha * target_x) + ((1.0 - effective_alpha) * self.curr_x)
+                self.curr_y = (effective_alpha * target_y) + ((1.0 - effective_alpha) * self.curr_y)
 
                 try:
                     pyautogui.moveTo(int(self.curr_x), int(self.curr_y))
                 except Exception:
                     pass
 
-                # 2. Left Click / Drag (Index Tip to Thumb Tip pinch)
-                pinch_dist = math.hypot(index.x - thumb.x, index.y - thumb.y)
+                # 2. Distance-Invariant Left Click (Index Tip to Thumb Tip Pinch Ratio)
+                pinch_raw = math.hypot(index.x - thumb.x, index.y - thumb.y)
+                pinch_ratio = pinch_raw / palm_scale
 
-                if pinch_dist < 0.052:
+                # Ratio is invariant regardless of distance from webcam:
+                # Down threshold ~0.35, Up hysteresis ~0.48
+                if pinch_ratio < 0.36:
                     if not self.is_pinching:
                         try:
                             pyautogui.mouseDown(button="left")
@@ -217,7 +246,7 @@ class HandMouseController:
                             self.last_click_time = time.time()
                         except Exception as e:
                             print(f"[HandMouse] Mouse down error: {e}")
-                else:
+                elif pinch_ratio > 0.48:
                     if self.is_pinching:
                         try:
                             pyautogui.mouseUp(button="left")
@@ -225,9 +254,11 @@ class HandMouseController:
                         except Exception as e:
                             print(f"[HandMouse] Mouse up error: {e}")
 
-                # 3. Right Click (Middle Tip to Thumb Tip pinch)
-                middle_dist = math.hypot(middle.x - thumb.x, middle.y - thumb.y)
-                if middle_dist < 0.050:
+                # 3. Distance-Invariant Right Click (Middle Tip to Thumb Tip Pinch Ratio)
+                middle_raw = math.hypot(middle.x - thumb.x, middle.y - thumb.y)
+                middle_ratio = middle_raw / palm_scale
+
+                if middle_ratio < 0.35:
                     if not self.is_middle_pinching:
                         now = time.time()
                         if now - self.last_click_time > 0.4:
@@ -238,9 +269,8 @@ class HandMouseController:
                                 self.last_click_time = now
                             except Exception as e:
                                 print(f"[HandMouse] Right click error: {e}")
-                else:
-                    if middle_dist > 0.070:
-                        self.is_middle_pinching = False
+                elif middle_ratio > 0.48:
+                    self.is_middle_pinching = False
 
             else:
                 # Hand lost - release any active drag

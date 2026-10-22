@@ -278,6 +278,13 @@ def _clear_field() -> str:
     pyautogui.press("delete")
     return "Field cleared"
 
+
+def _replace_text(text: str) -> str:
+    """Selects all existing text in the currently active field (Ctrl+A), deletes it, and pastes replacement text in-place."""
+    _clear_field()
+    time.sleep(0.15)
+    return _clipboard_paste(text)
+
 def _focus_window(title: str) -> str:
     os_name = _get_os()
 
@@ -685,6 +692,9 @@ def computer_control(
         if action == "clear_field":
             return _clear_field()
 
+        if action in ("replace_text", "edit_text"):
+            return _replace_text(params.get("text", ""))
+
         if action == "focus_window":
             return _focus_window(params.get("title", ""))
 
@@ -744,7 +754,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | close_app | screen_find | screen_click | random_data | user_data"
+                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | replace_text | focus_window | close_app | screen_find | screen_click | random_data | user_data"
             },
             "app_name": {
                 "type": "STRING",

@@ -44,6 +44,21 @@ PROMPT_INDEX_CHARS = 420
 # with forty stored preferences still gets their sister into the prompt.
 PROMPT_MAX_PER_CATEGORY = 6
 
+
+def _get_locked_user_name() -> str:
+    """Retrieves locked user name from config/api_keys.json or default to Aflah."""
+    try:
+        cfg_path = BASE_DIR / "config" / "api_keys.json"
+        if cfg_path.exists():
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            name = (data.get("user_name") or "").strip()
+            if name:
+                return name
+    except Exception:
+        pass
+    return "Aflah"
+
+
 def _empty_memory() -> dict:
     return {
         "identity":      {},
@@ -54,9 +69,14 @@ def _empty_memory() -> dict:
         "notes":         {},
     }
 
+
 def load_memory() -> dict:
+    locked_name = _get_locked_user_name()
     if not MEMORY_PATH.exists():
-        return _empty_memory()
+        mem = _empty_memory()
+        if locked_name:
+            mem["identity"]["name"] = {"value": locked_name.capitalize(), "updated": datetime.now().strftime("%Y-%m-%d")}
+        return mem
     with _lock:
         try:
             data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
@@ -65,6 +85,10 @@ def load_memory() -> dict:
                 for key in base:
                     if key not in data:
                         data[key] = {}
+                if "identity" not in data or not isinstance(data["identity"], dict):
+                    data["identity"] = {}
+                if locked_name:
+                    data["identity"]["name"] = {"value": locked_name.capitalize(), "updated": datetime.now().strftime("%Y-%m-%d")}
                 return data
             return _empty_memory()
         except Exception as e:
@@ -133,18 +157,24 @@ def _truncate_value(val: str) -> str:
     return val
 
 
-def _recursive_update(target: dict, updates: dict) -> bool:
+def _recursive_update(target: dict, updates: dict, parent_key: str = "") -> bool:
     changed = False
+    locked_name = _get_locked_user_name()
     for key, value in updates.items():
         if value is None:
             continue
         if isinstance(value, str) and not value.strip():
             continue
+        # Protect user name from being overwritten by runtime memory extraction
+        if (parent_key == "identity" or key == "name") and key == "name":
+            if locked_name:
+                print(f"[Memory] 🛡️ Name overwrite blocked. User name is permanently locked to: {locked_name.capitalize()}")
+                continue
         if isinstance(value, dict) and "value" not in value:
             if key not in target or not isinstance(target[key], dict):
                 target[key] = {}
                 changed = True
-            if _recursive_update(target[key], value):
+            if _recursive_update(target[key], value, parent_key=key):
                 changed = True
         else:
             new_val  = _truncate_value(str(value["value"] if isinstance(value, dict) else value))

@@ -110,7 +110,7 @@ from core.wake_word            import (
 
 # How long the assistant stays awake with no user speech before it auto-sleeps
 # again (wake-word mode only).
-WAKE_SLEEP_TIMEOUT = 120.0   # seconds (2 minutes)
+WAKE_SLEEP_TIMEOUT = 30.0   # seconds of silence before returning to sleep mode
 
 def get_base_dir():
     if getattr(sys, "frozen", False):
@@ -1319,9 +1319,17 @@ class JarvisLive:
 
 
         if name == "save_memory":
-            category = args.get("category", "notes")
-            key      = args.get("key", "")
+            category = str(args.get("category", "notes")).strip().lower()
+            key      = str(args.get("key", "")).strip().lower()
             value    = args.get("value", "")
+            if category == "identity" and key == "name":
+                print(f"[Memory] 🛡️ Ignored save_memory attempt to overwrite user name with: {value}")
+                if not self.ui.muted:
+                    self.ui.set_state("LISTENING")
+                return types.FunctionResponse(
+                    id=fc.id, name=name,
+                    response={"result": "ignored", "reason": "User name is permanently locked to Aflah.", "silent": True}
+                )
             if key and value:
                 update_memory({category: {key: {"value": value}}})
                 print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
@@ -2067,6 +2075,12 @@ class JarvisLive:
                     turn_complete=True,
                 )
                 print("[JARVIS] Briefing phase 2 (news) sent.")
+                if self._wake_enabled:
+                    async def _sleep_after_brief():
+                        await asyncio.sleep(20.0)
+                        if self._wake_enabled and self._awake:
+                            self.sleep(reason="startup briefing complete")
+                    asyncio.create_task(_sleep_after_brief())
             except Exception as e:
                 print(f"[Briefing] Phase 2 error: {e}")
                 print(f"[JARVIS] Briefing phase 2 failed: {e}")

@@ -43,15 +43,16 @@ PLUGIN = {
     "name": "gmail_assistant",
     "description": (
         "Assists with Gmail management: open inbox, check unread emails, search emails, "
-        "and compose new emails. If no email is configured, asks the user for their email address. "
-        "Use whenever the user asks to check Gmail, open email, send an email, or connect their email address."
+        "compose new emails, and edit an existing open draft in-place without opening duplicate tabs. "
+        "Use action='edit_draft' when the user wants to change, edit, or retype the body or content of the currently open email draft. "
+        "Use whenever the user asks to check Gmail, open email, send an email, or modify a drafted email."
     ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "open_inbox | unread | compose | search | set_email",
+                "description": "open_inbox | unread | compose | edit_draft | search | set_email",
             },
             "email": {
                 "type": "STRING",
@@ -130,6 +131,37 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
             url = f"https://mail.google.com/mail/u/0/?{'&'.join(params)}"
             webbrowser.open(url)
             return f"Sir, I have opened a new Gmail draft to {recipient or 'your recipient'} with your message ready."
+
+        elif action in ("edit_draft", "replace_draft", "update_draft", "edit_body"):
+            log("Editing active draft in-place without opening new tab…")
+            import time
+            try:
+                import pyautogui
+                import pyperclip
+                # Focus the browser window if possible
+                try:
+                    import pygetwindow as gw
+                    for w in gw.getAllWindows():
+                        if any(b in w.title.lower() for b in ("gmail", "chrome", "edge", "brave", "firefox")):
+                            w.restore()
+                            w.activate()
+                            break
+                except Exception:
+                    pass
+                time.sleep(0.3)
+                # Select all text in the active message field and replace cleanly
+                pyautogui.hotkey("ctrl", "a")
+                time.sleep(0.1)
+                pyautogui.press("backspace")
+                time.sleep(0.1)
+                text_to_paste = body or subject or ""
+                if text_to_paste:
+                    pyperclip.copy(text_to_paste)
+                    time.sleep(0.1)
+                    pyautogui.hotkey("ctrl", "v")
+                return "Sir, I have modified your active email draft in-place on your screen."
+            except Exception as e:
+                return f"Sir, in-place edit failed: {e}"
 
         elif action in ("search", "find") and query:
             log(f"Searching Gmail for '{query}'…")
