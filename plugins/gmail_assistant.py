@@ -52,7 +52,7 @@ PLUGIN = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "open_inbox | unread | compose | edit_draft | search | set_email",
+                "description": "open_inbox | unread | compose | edit_draft | search | set_email | save_contact",
             },
             "email": {
                 "type": "STRING",
@@ -104,6 +104,12 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
             log(f"Connected Gmail account: {email_clean}")
             return f"Sir, I have successfully connected {email_clean} to your Gmail Assistant."
 
+    # Action: Save contact in memory
+    if action == "save_contact" and recipient and email_param:
+        from memory.memory_manager import save_contact
+        save_contact(recipient, email=email_param)
+        return f"Sir, I have saved {recipient}'s email ({email_param}) to your contacts."
+
     # 2. Check if email is missing — ask the user!
     if not configured_email and not email_param:
         log("Prompting for email configuration…")
@@ -121,16 +127,56 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
 
         elif action in ("compose", "send", "write"):
             log(f"Composing email to {recipient or 'recipient'}…")
+            final_recipient = recipient
+
+            # Contact resolution: map names like 'Amjad Ali' to saved email address
+            if recipient and "@" not in recipient:
+                try:
+                    from memory.memory_manager import get_contact, save_contact
+                    contact = get_contact(recipient)
+                    if contact and contact.get("email"):
+                        final_recipient = contact["email"]
+                        log(f"Resolved '{recipient}' -> {final_recipient}")
+                    elif email_param and "@" in email_param:
+                        save_contact(recipient, email=email_param)
+                        final_recipient = email_param
+                        log(f"Saved contact '{recipient}' -> {final_recipient}")
+                except Exception as ce:
+                    print(f"[GmailAssistant] Contact resolution note: {ce}")
+
             params = ["view=cm", "fs=1"]
-            if recipient:
-                params.append(f"to={urllib.parse.quote(recipient)}")
+            if final_recipient:
+                params.append(f"to={urllib.parse.quote(final_recipient)}")
             if subject:
                 params.append(f"su={urllib.parse.quote(subject)}")
             if body:
                 params.append(f"body={urllib.parse.quote(body)}")
             url = f"https://mail.google.com/mail/u/0/?{'&'.join(params)}"
             webbrowser.open(url)
-            return f"Sir, I have opened a new Gmail draft to {recipient or 'your recipient'} with your message ready."
+
+            # Auto-commit recipient chip via Enter key after browser opens
+            def _commit_recipient_chip():
+                import time
+                time.sleep(2.0)
+                try:
+                    import pyautogui
+                    import pygetwindow as gw
+                    for w in gw.getAllWindows():
+                        if any(b in w.title.lower() for b in ("gmail", "chrome", "edge", "brave", "firefox")):
+                            w.activate()
+                            break
+                    time.sleep(0.3)
+                    pyautogui.press("enter")
+                except Exception:
+                    pass
+
+            import threading
+            threading.Thread(target=_commit_recipient_chip, daemon=True).start()
+
+            display_target = recipient if recipient else "your recipient"
+            if final_recipient and final_recipient != recipient:
+                display_target = f"{recipient} ({final_recipient})"
+            return f"Sir, I have prepared a new Gmail draft to {display_target} with your message ready."
 
         elif action in ("edit_draft", "replace_draft", "update_draft", "edit_body"):
             log("Editing active draft in-place without opening new tab…")

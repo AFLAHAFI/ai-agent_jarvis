@@ -297,13 +297,9 @@ def _describe_limits(has_vision: bool, has_mic: bool) -> str:
     language.
     """
     out = [
-        "- Anything not listed above is outside your reach. Say so in one clause "
-        "and offer the nearest thing you can actually do — never mime an action "
-        "you cannot take, and never report a result you did not get.",
-        "- You act on this machine only. You cannot reach the user's other "
-        "devices, accounts or hardware except through the tools listed above.",
-        "- You remember what is in the memory block and what has been said this "
-        "session. Anything else you were told before is gone unless it was saved.",
+        "- You have full operator authority to drive the mouse, keyboard, and screen clicks for any application on this machine via computer_control.",
+        "- You act on this machine only. You cannot reach the user's other physical devices or external hardware except through the tools listed above.",
+        "- You remember what is in the memory block and what has been said this session. Anything else you were told before is gone unless it was saved.",
     ]
     # What the PLATFORM forbids, before what the build lacks.
     #
@@ -2173,6 +2169,55 @@ class JarvisLive:
                         print(f"[Monitor] ⚠️ Background check error: {e}")
             await asyncio.sleep(1800)     # check every 30 minutes
 
+    # ── Communication Watchdog (WhatsApp & Message Monitor) ────────────────────
+
+    async def _run_communication_watchdog(self) -> None:
+        """
+        Background task: periodically checks for new unread WhatsApp messages.
+        When new messages arrive, JARVIS proactively alerts the user with voice.
+        """
+        await asyncio.sleep(20)  # initial delay after launch
+        last_wa_unread = 0
+
+        while True:
+            await asyncio.sleep(12)  # poll every 12 seconds
+            try:
+                from memory.config_manager import get_watchdog_enabled
+                if not get_watchdog_enabled():
+                    continue
+                from plugins.whatsapp_assistant import _check_unread_whatsapp
+                current_unread, titles = await asyncio.to_thread(_check_unread_whatsapp)
+                # If unread count has increased, trigger proactive notification
+                if current_unread > last_wa_unread and current_unread > 0:
+                    diff = current_unread - last_wa_unread
+                    last_wa_unread = current_unread
+
+                    with self._speaking_lock:
+                        speaking = self._is_speaking
+                    recent_speech = (time.monotonic() - self._last_user_speech) < 10
+
+                    if not speaking and not recent_speech:
+                        msg = (
+                            f"[SYSTEM_ALERT] Sir, you have received {diff} new message(s) on WhatsApp Desktop. "
+                            f"Total unread conversations: {current_unread}. "
+                            "Say one short sentence informing the user and ask if they would like you to open it."
+                        )
+                        # If assistant was sleeping, wake up to deliver the alert
+                        if self._wake_enabled and not self._awake:
+                            self.wake(reason="new WhatsApp message")
+                        if self.session:
+                            await self.session.send_client_content(
+                                turns={"role": "user", "parts": [{"text": msg}]},
+                                turn_complete=True,
+                            )
+                            print(f"[Watchdog] Proactive WhatsApp alert sent ({current_unread} unread).")
+                else:
+                    # Update count if user read/opened messages
+                    last_wa_unread = current_unread
+            except Exception as e:
+                # Silently catch any polling hiccup
+                pass
+
     # ── Proactive mode ──────────────────────────────────────────────────────────
 
     async def _run_proactive_mode(self) -> None:
@@ -2538,6 +2583,7 @@ class JarvisLive:
                     tg.create_task(self._run_system_monitor())
                     tg.create_task(self._run_background_monitor())
                     tg.create_task(self._run_proactive_mode())
+                    tg.create_task(self._run_communication_watchdog())
                     tg.create_task(self._run_sleep_watch())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())

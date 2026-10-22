@@ -674,13 +674,17 @@ def computer_control(
             coords = _screen_find(params.get("description", ""))
             return f"{coords[0]},{coords[1]}" if coords else "NOT_FOUND"
 
-        if action == "screen_click":
+        if action in ("screen_click", "screen_double_click"):
             desc   = params.get("description", "")
             coords = _screen_find(desc)
             if coords:
-                time.sleep(0.2)
-                _click(x=coords[0], y=coords[1])
-                return f"Clicked '{desc}' at {coords}"
+                time.sleep(0.15)
+                if action == "screen_double_click":
+                    _double_click(x=coords[0], y=coords[1])
+                    return f"Double-clicked '{desc}' at {coords}"
+                else:
+                    _click(x=coords[0], y=coords[1])
+                    return f"Clicked '{desc}' at {coords}"
             return f"Element not found on screen: '{desc}'"
 
         if action == "wait":
@@ -730,31 +734,25 @@ def computer_control(
 TOOL = {
     "name": "computer_control",
     "description": (
-        "Direct computer control: type, click, hotkeys, scroll, move mouse, "
-        "screenshots, find elements on screen, and CLOSE an application. "
-        "Use action='screen_click' with 'description' (e.g. 'search bar', 'mute button', 'file menu') "
-        "whenever the user asks to 'go click X' or 'click on X' to find and click any visual element on screen.  "
-        "Use action='close_app' with 'app_name' whenever the user asks to "
-        "close, quit or exit a program - 'close Spotify', 'quit Chrome'. "
-        "Always name the application in 'app_name'; there is no action that "
-        "closes 'whatever is in front', because that is usually the assistant. "
-        "To OPEN an application use the open_app tool instead. "
-        "Read the status the tool returns: 'done' means it was confirmed, "
-        "'unverified' means it was requested and could NOT be confirmed - say "
-        "so rather than claiming success - and 'ask' means nothing was done "
-        "and the question must go to the user first."
+        "Direct visual computer control: type, click, hotkeys, scroll, move mouse, "
+        "screenshots, find and click visual elements on screen, and CLOSE an application. "
+        "You have FULL OPERATOR PERMISSIONS. Use action='screen_click' or 'screen_double_click' with 'description' "
+        "(e.g. 'search bar', 'mute button', 'chat with Amjad Ali', 'unread WhatsApp message', 'Send button') "
+        "whenever the user asks to click, open, or interact with any visual UI button, chat, link, or element on screen. "
+        "Use action='close_app' with 'app_name' whenever the user asks to close, quit or exit a program. "
+        "To OPEN an application use the open_app tool instead."
     ),
     # Used in place of `description` only when a small model is on a tool
     # budget - Gemini still gets the full text. See providers/schema.py.
     "brief": (
-        "Controls the computer: type, click, hotkeys, scroll, screenshots, and close_app to close a named application (put its name in 'app_name'). Use open_app to open one."
+        "Controls the computer: type, click, hotkeys, scroll, screenshots, screen_click to click visual elements, and close_app."
     ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | replace_text | focus_window | close_app | screen_find | screen_click | random_data | user_data"
+                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | replace_text | focus_window | close_app | screen_find | screen_click | screen_double_click | random_data | user_data"
             },
             "app_name": {
                 "type": "STRING",

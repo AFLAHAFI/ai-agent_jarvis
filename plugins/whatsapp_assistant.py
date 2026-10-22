@@ -1,9 +1,8 @@
 """
 plugins/whatsapp_assistant.py — Native WhatsApp Desktop Assistant.
 
-Sends messages, opens chats, and checks unread messages via the native
-Windows WhatsApp Desktop application using the registered 'whatsapp://'
-protocol and window telemetry.
+Sends messages, opens chats, checks unread messages, and visually clicks specific
+conversations via the native Windows WhatsApp Desktop application.
 """
 from __future__ import annotations
 
@@ -19,9 +18,11 @@ from typing import Optional
 PLUGIN = {
     "name": "whatsapp_assistant",
     "description": (
-        "Controls the native WhatsApp Desktop application on Windows. "
+        "Controls the native WhatsApp Desktop application on Windows with visual screen clicking. "
         "Actions: 'send' (send a message to a contact/phone), 'open' (open WhatsApp Desktop), "
-        "or 'check_unread' (check for unread WhatsApp messages and conversations). "
+        "'check_unread' (inspect unread conversation count), "
+        "'open_chat' (visually click or search and open a specific contact's chat), "
+        "or 'open_unread' (visually click and open the newest unread message on screen). "
         "Always prefers the native Windows desktop app over the web browser."
     ),
     "parameters": {
@@ -29,11 +30,11 @@ PLUGIN = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "send | open | check_unread",
+                "description": "send | open | check_unread | open_chat | open_unread",
             },
             "recipient": {
                 "type": "STRING",
-                "description": "Phone number with country code (e.g. '+919876543210' or '9876543210') or contact name.",
+                "description": "Phone number with country code (e.g. '+919876543210' or '9876543210') or contact name (e.g. 'Amjad Ali').",
             },
             "message": {
                 "type": "STRING",
@@ -100,6 +101,40 @@ def _bring_whatsapp_to_front() -> bool:
     return False
 
 
+def _visual_click_whatsapp(description: str) -> bool:
+    """Uses vision-based screen finding to click an element in WhatsApp."""
+    try:
+        from actions.computer_control import _screen_find, _click
+        coords = _screen_find(description)
+        if coords:
+            time.sleep(0.15)
+            _click(x=coords[0], y=coords[1])
+            return True
+    except Exception as e:
+        print(f"[WhatsApp] Visual click error: {e}")
+    return False
+
+
+def _search_and_open_chat(contact_name: str) -> bool:
+    """Uses native WhatsApp keyboard navigation to search and open a conversation."""
+    try:
+        import pyautogui
+        import pyperclip
+        _bring_whatsapp_to_front()
+        time.sleep(0.3)
+        # Ctrl + F to focus search in WhatsApp Desktop
+        pyautogui.hotkey("ctrl", "f")
+        time.sleep(0.2)
+        pyperclip.copy(contact_name)
+        pyautogui.hotkey("ctrl", "v")
+        time.sleep(0.5)
+        pyautogui.press("enter")
+        return True
+    except Exception as e:
+        print(f"[WhatsApp] Search & open error: {e}")
+        return False
+
+
 def run(parameters: dict, player=None, session_memory=None) -> str:
     action = str(parameters.get("action", "")).strip().lower()
     recipient = str(parameters.get("recipient", "")).strip()
@@ -108,10 +143,54 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
 
     # Auto-detect action if not specified
     if not action:
-        if recipient or message:
+        if message:
             action = "send"
+        elif recipient:
+            action = "open_chat"
         else:
             action = "open"
+
+    # Action: Open a specific chat or contact
+    if action in ("open_chat", "click_chat", "find_chat"):
+        if not recipient:
+            return "Sir, which contact's chat would you like me to open on WhatsApp?"
+        log(f"Opening chat for {recipient}…")
+        _open_native_whatsapp("whatsapp:")
+        time.sleep(0.6)
+        _bring_whatsapp_to_front()
+        time.sleep(0.4)
+        # 1. Vision click on chat item
+        if _visual_click_whatsapp(f"chat item with {recipient} in WhatsApp"):
+            return f"Sir, I visually located and opened your chat with {recipient} in WhatsApp."
+        # 2. Native search & jump
+        if _search_and_open_chat(recipient):
+            return f"Sir, I searched and opened your chat with {recipient} in WhatsApp Desktop."
+        return f"Sir, I opened WhatsApp Desktop but could not locate {recipient}."
+
+    # Action: Open newest unread message
+    if action in ("open_unread", "click_unread"):
+        log("Opening newest unread WhatsApp message…")
+        _open_native_whatsapp("whatsapp:")
+        time.sleep(0.6)
+        _bring_whatsapp_to_front()
+        time.sleep(0.4)
+        # Vision click on unread green badge or top unread chat
+        if (_visual_click_whatsapp("green unread circle badge in WhatsApp chat list") or
+            _visual_click_whatsapp("top unread chat row in WhatsApp")):
+            return "Sir, I have visually located and opened your newest unread WhatsApp message."
+        else:
+            # Fallback keyboard navigation
+            try:
+                import pyautogui
+                pyautogui.hotkey("ctrl", "f")
+                time.sleep(0.2)
+                pyautogui.press("escape")
+                time.sleep(0.2)
+                pyautogui.press("down")
+                pyautogui.press("enter")
+                return "Sir, I navigated to your latest WhatsApp chat on screen."
+            except Exception:
+                return "Sir, I opened WhatsApp Desktop for you."
 
     # Action: Check Unread Messages
     if action == "check_unread":
@@ -151,8 +230,20 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
         native_uri = f"whatsapp://send?phone={phone_clean}&text={encoded_msg}"
         fallback_web = f"https://web.whatsapp.com/send?phone={phone_clean}&text={encoded_msg}"
     else:
-        native_uri = f"whatsapp://send?text={encoded_msg}"
-        fallback_web = f"https://web.whatsapp.com/send?text={encoded_msg}"
+        # Check contact memory for phone number
+        try:
+            from memory.memory_manager import get_contact
+            c = get_contact(recipient)
+            if c and c.get("phone"):
+                phone_clean = _clean_phone(c["phone"])
+                native_uri = f"whatsapp://send?phone={phone_clean}&text={encoded_msg}"
+                fallback_web = f"https://web.whatsapp.com/send?phone={phone_clean}&text={encoded_msg}"
+            else:
+                native_uri = f"whatsapp://send?text={encoded_msg}"
+                fallback_web = f"https://web.whatsapp.com/send?text={encoded_msg}"
+        except Exception:
+            native_uri = f"whatsapp://send?text={encoded_msg}"
+            fallback_web = f"https://web.whatsapp.com/send?text={encoded_msg}"
 
     log(f"Opening native WhatsApp for {recipient or 'contact'}…")
 

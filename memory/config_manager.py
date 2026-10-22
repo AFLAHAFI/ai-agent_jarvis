@@ -109,6 +109,11 @@ def get_wake_word_enabled() -> bool:
     return load_api_keys().get("wake_word_enabled", False)
 
 
+def get_watchdog_enabled() -> bool:
+    """Whether proactive WhatsApp/email communication watchdog is enabled."""
+    return load_api_keys().get("watchdog_enabled", True)
+
+
 def save_wake_word_enabled(enabled: bool) -> None:
     ensure_config_dir()
     data: dict = {}

@@ -44,31 +44,41 @@ Beyond conversation, MARK LVI acts as an autonomous digital agent capable of per
 * **Right-Click:** Pinch middle finger and thumb together at any distance.
 * **Voice Toggle:** Activated instantly via *"Enable hand tracking"* or *"Disable hand tracking"*.
 
-### 4. ✍️ In-Place Smart UI Editing & Computer Control (`actions/computer_control.py`)
-* **Context-Aware In-Place Replacement:** Edits and updates text in currently active fields (`Ctrl+A` ➔ `Backspace` ➔ `Type/Paste`) without spawning unwanted duplicate browser tabs or windows.
-* **Sub-Pixel Precision Visual Screen Click:** Uses Gemini 2D normalized bounding box localization (`box_2d: [ymin, xmin, ymax, xmax]`) for sub-pixel accuracy.
-* Simply say: *"Click on the search bar"*, *"Replace text with [New Text]"*, or *"Click the close button"*.
+### 4. ✍️ Full Operator Authority & In-Place UI Control (`actions/computer_control.py`)
+* **Zero-Refusal UI Authority:** Unrestricted operator permissions over desktop software — never refuses to click or interact with UI elements.
+* **Sub-Pixel Precision Visual Screen Click:** Uses Gemini 2D normalized bounding box localization (`box_2d: [ymin, xmin, ymax, xmax]`) to visually locate and click ANY button, icon, menu, or chat on screen.
+* **Context-Aware In-Place Replacement:** Edits and updates text in currently active fields (`Ctrl+A` ➔ `Backspace` ➔ `Type/Paste`) without duplicate tabs or windows.
 
-### 5. 💬 Native Windows WhatsApp Desktop Assistant (`plugins/whatsapp_assistant.py`)
-* **Native Desktop App Integration:** Opens chats and drafts messages directly inside the official Windows **WhatsApp Desktop** application using registered `whatsapp://` URI protocols.
-* **Unread Message Telemetry:** Scans active WhatsApp window headers to detect and announce unread conversations: *"Sir, you have 3 unread conversations in WhatsApp Desktop."*
+### 5. 💬 Native WhatsApp Desktop & Visual Chat Opener (`plugins/whatsapp_assistant.py`)
+* **Native Desktop App Integration:** Opens chats and drafts messages directly inside the official Windows **WhatsApp Desktop** app via `whatsapp://` URI protocols.
+* **Visual Chat & Unread Opener:** Visually navigates the WhatsApp interface to locate and click specific contact chats or green unread message badges on screen.
+* **Unread Message Telemetry:** Scans active WhatsApp window headers to detect and announce unread conversations.
 
-### 6. 🎙️ Strict Wake-Word Standby & Auto-Sleep (`core/wake_word.py` & `main.py`)
+### 6. 🐕 Proactive Communication Watchdog (`main.py`)
+* **Background Message Monitor:** Periodically monitors WhatsApp Desktop and alerts the user proactively with speech when new incoming messages arrive: *"Sir, you have received new message(s) on WhatsApp Desktop."*
+* **Automatic Standby Wakeup:** Gently wakes from sleep to deliver urgent notifications and offers to open the message visually.
+
+### 7. 📖 Smart Contact Book & Gmail Recipient Resolution (`plugins/gmail_assistant.py`)
+* **Intelligent Recipient Mapping:** Automatically resolves contact names (e.g., "Amjad Ali") to verified email addresses stored in persistent memory.
+* **Auto-Commit Contact Chips:** Commits recipient chips automatically in the Gmail compose interface.
+* **In-Place Draft Editing:** Modifies active email drafts in-place without spawning duplicate browser tabs.
+
+### 8. 🎙️ Strict Wake-Word Standby & Auto-Sleep (`core/wake_word.py` & `main.py`)
 * **Strict "Hey Jarvis" Isolation:** Powered by local, offline ONNX **OpenWakeWord** models. The assistant stays silent in the background until explicitly invoked.
 * **Automated Silence Timeout:** After executing user instructions, JARVIS automatically returns to a quiet standby state after a configured period of inactivity.
 
-### 7. 🔒 Permanent User Identity Lock (`memory/memory_manager.py`)
+### 9. 🔒 Permanent User Identity Lock (`memory/memory_manager.py`)
 * Enforces write-protection on primary user identity attributes configured in `config/api_keys.json`, ensuring the user's name is permanently locked and never overwritten by conversational context noise.
 
-### 8. 🎨 Autonomous MS Paint Live Speed-Drawing (`actions/creative_agent.py`)
+### 10. 🎨 Autonomous MS Paint Live Speed-Drawing (`actions/creative_agent.py`)
 * Fully dynamic vector art synthesis for **ANY** subject requested by voice (humans, cats, cars, houses, landscapes, etc.) via Gemini FAST.
 * **Physical Mouse Execution:** Opens MS Paint, maximizes it, and physically maneuvers the mouse across the canvas live on screen, rendering continuous bezier-like strokes in real-time.
 * **Safe-Bounds Protection:** Ensures drawing is strictly contained inside the canvas sheet without touching toolbars or system controls.
 
-### 9. 🔌 Modular Plug-and-Play Plugins Ecosystem (`plugins/`)
-* **Gmail Assistant (`plugins/gmail_assistant.py`):** Open inbox, check unread emails, search messages, and edit active drafts in-place.
+### 11. 🔌 Modular Plug-and-Play Plugins Ecosystem (`plugins/`)
+* **Gmail Assistant (`plugins/gmail_assistant.py`):** Open inbox, check unread emails, search messages, resolve contacts, and edit active drafts in-place.
 * **Live Daily Briefing (`plugins/live_briefing.py`):** Live weather conditions and top world news headlines with time-aware greetings.
-* **WhatsApp Desktop (`plugins/whatsapp_assistant.py`):** Native Windows messaging and unread count checks.
+* **WhatsApp Desktop (`plugins/whatsapp_assistant.py`):** Native Windows messaging, unread checks, and visual chat clicking.
 * **Spotify & Media Controller (`plugins/spotify_media.py`):** Control media playback (Play/Pause, Next Track, Mute, Volume Control).
 * **System Deep Cleaner (`plugins/system_cleaner.py`):** Flush Windows `%TEMP%` cache files, empty Recycle Bin silently, and free RAM memory.
 

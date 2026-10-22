@@ -10,5 +10,6 @@
   "hud_style": "hybrid",
   "user_email": "user@example.com",
   "morning_brief_enabled": true,
-  "wake_word_enabled": true
+  "wake_word_enabled": true,
+  "watchdog_enabled": true
 }

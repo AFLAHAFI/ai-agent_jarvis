@@ -65,9 +65,38 @@ def _empty_memory() -> dict:
         "preferences":   {},
         "projects":      {},
         "relationships": {},
+        "contacts":      {},
         "wishes":        {},
         "notes":         {},
     }
+
+
+def get_contact(name: str) -> dict | None:
+    """Look up a contact by name (case-insensitive match) in memory."""
+    mem = load_memory()
+    contacts = mem.get("contacts", {})
+    name_clean = name.strip().lower()
+    for cname, details in contacts.items():
+        if cname.lower() == name_clean or name_clean in cname.lower() or cname.lower() in name_clean:
+            return details if isinstance(details, dict) else {"email": str(details)}
+    return None
+
+
+def save_contact(name: str, email: str = "", phone: str = "") -> None:
+    """Saves or updates a contact in persistent memory."""
+    mem = load_memory()
+    if "contacts" not in mem or not isinstance(mem["contacts"], dict):
+        mem["contacts"] = {}
+    entry = mem["contacts"].get(name, {})
+    if not isinstance(entry, dict):
+        entry = {}
+    if email:
+        entry["email"] = email.strip()
+    if phone:
+        entry["phone"] = phone.strip()
+    entry["updated"] = datetime.now().strftime("%Y-%m-%d")
+    mem["contacts"][name] = entry
+    save_memory(mem)
 
 
 def load_memory() -> dict:
