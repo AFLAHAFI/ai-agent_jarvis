@@ -1,9 +1,9 @@
 @echo off
-title JARVIS AI (MARK LVI)
+title JARVIS Desktop AI
 cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
 echo ========================================================
-echo               STARTING JARVIS (MARK LVI)
+echo               STARTING JARVIS DESKTOP AI
 echo ========================================================
 echo.
 ".venv\Scripts\python.exe" main.py
