@@ -17,6 +17,13 @@ if _IS_WINDOWS:
     import win32gui
     import win32process
 
+_ui_ref = None
+
+
+def bind_ui(ui):
+    global _ui_ref
+    _ui_ref = ui
+
 
 def _find_window_by_query(query: str) -> Optional[int]:
     """Finds top-level visible window matching a process name or window title."""
@@ -85,8 +92,48 @@ def window_manager(
     if not _IS_WINDOWS:
         return "Window management is currently supported on Windows systems."
 
-    if not app and act not in ("minimize_all", "show_desktop"):
+    if not app and act not in ("minimize_all", "show_desktop", "mini_hud", "full_hud", "switch_hud"):
         return "Please specify the application or window name (e.g. 'Chrome', 'WhatsApp', 'VS Code')."
+
+    if act in ("mini_hud", "switch_hud", "mini_mode"):
+        mode = (side or app or "mini").lower()
+        if _ui_ref:
+            _ui_ref.switch_mode(mode)
+            desc = "Mini Assistant Companion" if mode in ("mini", "compact", "small") else "Full Stark Arc Reactor HUD"
+            return f"Switched interface to {desc}."
+        return "UI handle not bound."
+
+    if act in ("full_hud", "restore_hud"):
+        if _ui_ref:
+            _ui_ref.switch_mode("full")
+            return "Restored full Stark Arc Reactor HUD."
+        return "UI handle not bound."
+
+    if act in ("preset", "workspace"):
+        preset_name = (app or side or "coding").lower()
+        x, y, w, h = _get_work_area()
+        if preset_name in ("coding", "code", "dev"):
+            code_hwnd = _find_window_by_query("code") or _find_window_by_query("visual studio")
+            chrome_hwnd = _find_window_by_query("chrome") or _find_window_by_query("edge")
+            if code_hwnd:
+                win32gui.ShowWindow(code_hwnd, win32con.SW_RESTORE)
+                win32gui.MoveWindow(code_hwnd, x, y, int(w * 0.55), h, True)
+                win32gui.SetForegroundWindow(code_hwnd)
+            if chrome_hwnd:
+                win32gui.ShowWindow(chrome_hwnd, win32con.SW_RESTORE)
+                win32gui.MoveWindow(chrome_hwnd, x + int(w * 0.55), y, int(w * 0.45), h, True)
+            return "Activated Coding Workspace preset (VS Code on left, browser on right)."
+        elif preset_name in ("research", "study"):
+            chrome_hwnd = _find_window_by_query("chrome") or _find_window_by_query("edge")
+            doc_hwnd = _find_window_by_query("word") or _find_window_by_query("notepad") or _find_window_by_query("pdf")
+            if chrome_hwnd:
+                win32gui.ShowWindow(chrome_hwnd, win32con.SW_RESTORE)
+                win32gui.MoveWindow(chrome_hwnd, x, y, w // 2, h, True)
+                win32gui.SetForegroundWindow(chrome_hwnd)
+            if doc_hwnd:
+                win32gui.ShowWindow(doc_hwnd, win32con.SW_RESTORE)
+                win32gui.MoveWindow(doc_hwnd, x + (w // 2), y, w // 2, h, True)
+            return "Activated Research Workspace preset (Browser on left, document on right)."
 
     hwnd = _find_window_by_query(app) if app else None
 
@@ -187,26 +234,24 @@ def window_manager(
 TOOL = {
     "name": "window_manager",
     "description": (
-        "Controls application windows: focuses apps, snaps windows to the left or right half "
-        "of the screen, minimizes background windows, or minimizes everything except a target app. "
-        "Use whenever the user asks to switch to, focus, minimize, or snap a window "
-        "(in English or Malayalam: 'Focus VS Code', 'ക്രോം ഓപ്പൺ ആക്കി ബാക്കി മിനിമൈസ് ചെയ്യ്', "
-        "'Snap WhatsApp to left', 'ബ്രൗസർ വലതുവശത്തോട്ട് മാറ്റൂ')."
+        "Controls application windows and desktop workspace: focuses apps, snaps windows to the left or right, "
+        "toggles between full Stark HUD and Mini Assistant Companion HUD (e.g. 'Switch to mini HUD', 'മിനി ഹബ്ബിലോട്ട് മാറ്', 'Open full HUD'), "
+        "minimizes background windows, or activates workspace presets (e.g. 'Coding workspace', 'Research workspace')."
     ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "focus | snap | minimize_all_except | minimize_all",
+                "description": "focus | snap | mini_hud | full_hud | preset | minimize_all_except | minimize_all",
             },
             "app_name": {
                 "type": "STRING",
-                "description": "The name or title of the app (e.g. 'Chrome', 'WhatsApp', 'VS Code', 'Paint').",
+                "description": "The name or title of the app (e.g. 'Chrome', 'WhatsApp', 'VS Code', 'Paint') or preset name ('coding', 'research').",
             },
             "side": {
                 "type": "STRING",
-                "description": "left | right | maximize | minimize (used with action='snap')",
+                "description": "left | right | maximize | minimize | mini | full",
             },
         },
         "required": ["action"],

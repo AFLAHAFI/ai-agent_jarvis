@@ -134,6 +134,14 @@ class HandMouseController:
                 except Exception:
                     pass
                 self.cap = None
+
+            if self.thread and self.thread.is_alive():
+                try:
+                    self.thread.join(timeout=0.35)
+                except Exception:
+                    pass
+                self.thread = None
+
             return True, "Hand tracking mouse control stopped."
 
     def _run_loop(self) -> None:
@@ -184,9 +192,16 @@ class HandMouseController:
         print("[HandMouse] 🖐️ Hand tracking active. Point with index finger, pinch to click!")
 
         while self.running:
-            ret, frame = cap.read()
+            if not self.running:
+                break
+            try:
+                ret, frame = cap.read()
+            except Exception:
+                break
+            if not self.running:
+                break
             if not ret or frame is None:
-                time.sleep(0.02)
+                time.sleep(0.015)
                 continue
 
             # Mirror frame horizontally so hand moves naturally

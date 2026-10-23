@@ -595,6 +595,10 @@ class JarvisLive:
         try:
             from actions.hand_mouse import bind_ui as bind_hand_mouse_ui
             bind_hand_mouse_ui(ui)
+            from actions.window_manager import bind_ui as bind_win_ui
+            bind_win_ui(ui)
+            from actions.screen_watchdog import bind_ui as bind_watchdog_ui
+            bind_watchdog_ui(ui)
         except Exception:
             pass
         self._asst_name     = "JARVI    S"   # updated each session from config
@@ -756,6 +760,7 @@ class JarvisLive:
         """Called from the detector thread when 'Hey Jarvis' is heard."""
         try:
             self.ui.bring_to_front()
+            self.ui.trigger_wake_flare()
         except Exception:
             pass
         self.wake(reason="wake word")
@@ -775,6 +780,7 @@ class JarvisLive:
             pass
         try:
             self.ui.bring_to_front()
+            self.ui.trigger_wake_flare()
         except Exception:
             pass
 
@@ -1333,6 +1339,17 @@ class JarvisLive:
         except Exception:
             pass
 
+
+        if name in ("switch_hud_mode", "hud_control"):
+            mode = str(args.get("mode", "mini")).lower()
+            self.ui.switch_mode(mode)
+            desc = "Mini Assistant Companion" if mode in ("mini", "compact", "small") else "Full Stark HUD"
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": f"Switched interface to {desc}."}
+            )
 
         if name == "save_memory":
             category = str(args.get("category", "notes")).strip().lower()
@@ -2026,8 +2043,8 @@ class JarvisLive:
             )
 
         p1 = (
-            f"Greet the user warmly, mention it is {time_str}, and say you are fetching today's news now.{session_clause} "
-            f"Keep it to 2 short sentences max. Do not call any tools.{lang_clause}{name_clause}"
+            f"Greet the user warmly as {name or 'Sir'}, mention it is {time_str}.{session_clause} "
+            f"Say all systems are operational and ask how you may assist today. Keep it to 2 concise sentences. Do not call any tools.{lang_clause}{name_clause}"
         )
 
         # Clear the turn-done event so we can wait for Phase 1 to finish
@@ -2068,9 +2085,8 @@ class JarvisLive:
                     await asyncio.sleep(1.0)
 
                 try:
-                    news_text = await asyncio.wait_for(news_done, timeout=8.0)
-                except Exception as e:
-                    self.ui.write_log(f"SYS: News fetch timed out/failed: {e!r}")
+                    news_text = await asyncio.wait_for(news_done, timeout=4.0)
+                except Exception:
                     news_text = ""
 
                 if not self.session:

@@ -432,6 +432,12 @@ class HudCanvas(QWidget):
         except Exception:
             self.hud_style = "face"
         self._core_phase = 0.0
+        self._wake_flare = 0.0
+
+    def trigger_wake_flare(self) -> None:
+        """Trigger high-energy Arc Reactor power-up bloom when awakened."""
+        self._wake_flare = 1.0
+        self.update()
 
         self._tick       = 0
         self._scale      = 1.0
@@ -639,6 +645,9 @@ class HudCanvas(QWidget):
             self._scale += (self._tgt_scale - self._scale) * sp
             self._halo  += (self._tgt_halo  - self._halo)  * sp
 
+        if self._wake_flare > 0.0:
+            self._wake_flare = max(0.0, self._wake_flare - dt * 1.3)
+
         self._blink_tick += 1
         if self._blink_tick >= 38:
             self._blink = not self._blink
@@ -654,7 +663,7 @@ class HudCanvas(QWidget):
         # so a sleeping HUD stops pinning a CPU core. The visuals stay smooth
         # either way because the animation state keeps stepping at 60 Hz.
         self._paint_tick = (self._paint_tick + 1) % 6
-        active = (self.speaking or amp > 0.02
+        active = (self.speaking or amp > 0.02 or self._wake_flare > 0.01
                   or self.state in ("THINKING", "PROCESSING"))
         if _blinked or (self._paint_tick % 2 == 0 if active
                         else self._paint_tick % 3 == 0):
@@ -701,8 +710,9 @@ class HudCanvas(QWidget):
         main, acc = self._core_colours()
         bg = qcol(C.BG)
         amp = self._amp_disp
-        t = self._core_phase
-        live = (self.speaking or amp > 0.04) and not self.muted
+        flare = self._wake_flare
+        t = self._core_phase + flare * 3.5
+        live = (self.speaking or amp > 0.04 or flare > 0.01) and not self.muted
 
         def blend(col: QColor, a: float) -> QColor:
             """Pre-mix onto the background instead of asking Qt to composite.
@@ -723,7 +733,7 @@ class HudCanvas(QWidget):
         # washes the whole disc a flat dim blue and reads as fog. Ending it at
         # two thirds leaves it a body of light with somewhere to fall off to,
         # which is what makes it look lit rather than tinted.
-        lift = 1.0 + 0.55 * amp + (0.18 if self.speaking else 0.0)
+        lift = 1.0 + 0.55 * amp + (0.18 if self.speaking else 0.0) + flare * 2.2
         p.setPen(Qt.PenStyle.NoPen)
         for gr, a0, a1 in ((r * 0.70, 0.30, 0.0), (r * 0.34, 0.34, 0.0)):
             g = QRadialGradient(cx, cy, gr)
@@ -734,6 +744,19 @@ class HudCanvas(QWidget):
             p.setBrush(QBrush(g))
             p.drawEllipse(QRectF(cx - gr, cy - gr, gr * 2, gr * 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # 1b. Arc Reactor Ignition Bloom (cinematic flare on wake)
+        if flare > 0.02:
+            flare_r = r * (0.82 + 0.48 * flare)
+            flare_g = QRadialGradient(cx, cy, flare_r)
+            flare_g.setColorAt(0.00, blend(qcol("#ffffff"), min(0.98, 0.95 * flare)))
+            flare_g.setColorAt(0.32, blend(main, min(0.95, 0.80 * flare)))
+            flare_g.setColorAt(0.68, blend(qcol("#ffd700"), min(0.95, 0.45 * flare)))
+            flare_g.setColorAt(1.00, blend(main, 0.0))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(flare_g))
+            p.drawEllipse(QRectF(cx - flare_r, cy - flare_r, flare_r * 2, flare_r * 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
 
         # 2. Frame marks at the corners of the whole canvas, not of the circle.
         #    They are what set the scale: the eye reads the reactor as filling
@@ -4434,6 +4457,8 @@ class MainWindow(QMainWindow):
     _gesture_hud_show_sig = pyqtSignal()
     _gesture_hud_hide_sig = pyqtSignal()
     _gesture_hud_pinch_sig = pyqtSignal(bool)
+    _wake_flare_sig = pyqtSignal()
+    _switch_mode_sig = pyqtSignal(str)
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -4446,6 +4471,8 @@ class MainWindow(QMainWindow):
         self._gesture_hud_show_sig.connect(self._show_gesture_hud)
         self._gesture_hud_hide_sig.connect(self._hide_gesture_hud)
         self._gesture_hud_pinch_sig.connect(self._pinch_gesture_hud)
+        self._wake_flare_sig.connect(self._handle_wake_flare)
+        self._switch_mode_sig.connect(self._handle_switch_mode)
 
         # Load customization from config
         _cfg = _read_full_config()
@@ -5476,6 +5503,23 @@ class MainWindow(QMainWindow):
         """Update live pinch status on floating widget."""
         if self._gesture_hud is not None and self._gesture_hud.isVisible():
             self._gesture_hud.set_pinching(is_pinching)
+
+    def _handle_wake_flare(self):
+        """Restore from mini mode if needed and trigger Arc Reactor power-up flare."""
+        if self._mini_window is not None and self._mini_window.isVisible():
+            self._restore_from_mini()
+        try:
+            self.hud.trigger_wake_flare()
+        except Exception:
+            pass
+
+    def _handle_switch_mode(self, mode: str):
+        """Switch between Mini Assistant window and full Stark HUD."""
+        m = (mode or "").lower().strip()
+        if m in ("mini", "compact", "small", "widget"):
+            self._enter_mini_mode()
+        else:
+            self._restore_from_mini()
 
     def _build_header(self) -> QWidget:
         w = QWidget()
@@ -7322,6 +7366,20 @@ class JarvisUI:
         """Thread-safe: bring JARVIS window to the front over other apps."""
         try:
             self._win._bring_to_front_sig.emit()
+        except Exception:
+            pass
+
+    def switch_mode(self, mode: str = "mini"):
+        """Thread-safe: toggle between full Stark HUD and compact floating Mini HUD."""
+        try:
+            self._win._switch_mode_sig.emit(mode)
+        except Exception:
+            pass
+
+    def trigger_wake_flare(self):
+        """Thread-safe: trigger cinematic high-energy power-up flare on the Arc Reactor."""
+        try:
+            self._win._wake_flare_sig.emit()
         except Exception:
             pass
 
