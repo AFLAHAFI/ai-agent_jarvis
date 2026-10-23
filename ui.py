@@ -434,11 +434,6 @@ class HudCanvas(QWidget):
         self._core_phase = 0.0
         self._wake_flare = 0.0
 
-    def trigger_wake_flare(self) -> None:
-        """Trigger high-energy Arc Reactor power-up bloom when awakened."""
-        self._wake_flare = 1.0
-        self.update()
-
         self._tick       = 0
         self._scale      = 1.0
         self._tgt_scale  = 1.0
@@ -473,6 +468,11 @@ class HudCanvas(QWidget):
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._tmr.start(16)
+
+    def trigger_wake_flare(self) -> None:
+        """Trigger high-energy Arc Reactor power-up bloom when awakened."""
+        self._wake_flare = 1.0
+        self.update()
 
     def glance(self, dx: float, dy: float, hold: float = 1.1) -> None:
         """Ask the avatar to look somewhere for a moment (see HoloAvatar.glance)."""
