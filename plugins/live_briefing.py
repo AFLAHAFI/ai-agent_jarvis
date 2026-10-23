@@ -113,9 +113,24 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
     weather = _get_weather()
     news = _get_top_news(3)
 
+    todos_summary = ""
+    try:
+        from plugins.todo_notes import _load_todos
+        todos = _load_todos()
+        pending = [t.get("task") for t in todos if t.get("status") == "pending" and t.get("task")]
+        if len(pending) == 1:
+            todos_summary = f"On your agenda, you have one pending task: {pending[0]}. "
+        elif len(pending) > 1:
+            items_str = ", ".join(pending[:3])
+            more = f" and {len(pending) - 3} more" if len(pending) > 3 else ""
+            todos_summary = f"On your agenda, you have {len(pending)} pending tasks, including: {items_str}{more}. "
+    except Exception:
+        pass
+
     briefing_text = (
         f"{salutation}, Sir. It is {time_str} on {date_str}. "
         f"The weather is currently {weather}. "
+        f"{todos_summary}"
         f"Here are today's top headlines: First, {news[0]}. "
         f"Second, {news[1]}. "
         f"And third, {news[2]}. "

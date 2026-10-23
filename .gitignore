@@ -16,6 +16,9 @@ config/whatsapp_web/
 long_term.json
 */long_term.json
 memory/long_term.json
+todo_notes.json
+*/todo_notes.json
+memory/todo_notes.json
 memory/*.db
 *.docx
 *.doc

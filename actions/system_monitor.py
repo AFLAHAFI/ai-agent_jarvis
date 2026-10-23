@@ -198,3 +198,67 @@ class SystemMonitor:
             self._record("gpu")
 
         return " ".join(alerts) if alerts else None
+
+
+def system_diagnostics(
+    parameters: dict,
+    player=None,
+    session_memory=None,
+    **kwargs,
+) -> str:
+    """Action handler to query real-time hardware telemetry and diagnostic health."""
+    try:
+        cpu = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory().percent
+        temp = _get_cpu_temp()
+        gpu = _get_gpu_usage()
+
+        batt_str = ""
+        try:
+            batt = psutil.sensors_battery()
+            if batt:
+                state = "charging" if batt.power_plugged else "discharging"
+                batt_str = f"Battery is at {batt.percent:.0f}% ({state}). "
+        except Exception:
+            pass
+
+        temp_str = f"CPU temperature is {temp:.0f}°C. " if temp > 0 else ""
+        gpu_str = f"GPU load is {gpu:.0f}%. " if gpu >= 0 else ""
+
+        status_eval = "nominal"
+        if cpu > 85 or mem > 85 or (temp > 80):
+            status_eval = "under heavy load"
+
+        report = (
+            f"Diagnostics {status_eval}, sir. "
+            f"CPU usage is at {cpu:.0f}%, RAM usage is at {mem:.0f}%. "
+            f"{batt_str}{temp_str}{gpu_str}".strip()
+        )
+        if player:
+            player.write_log(f"JARVIS: {report}")
+        return report
+    except Exception as e:
+        return f"Could not retrieve hardware diagnostics: {e}"
+
+
+# ── Action tool declaration (auto-discovered by core/action_loader.py) ───────
+TOOL = {
+    "name": "system_diagnostics",
+    "description": (
+        "Reports real-time hardware diagnostic metrics: CPU usage, RAM utilization, "
+        "battery level, charging status, and CPU temperature. "
+        "Use whenever the user asks for system status, battery level, CPU/RAM usage, "
+        "laptop health, or in Malayalam ('സിസ്റ്റം സ്റ്റാറ്റസ് പറയൂ', 'ബാറ്ററി എത്രയുണ്ട്')."
+    ),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "query": {
+                "type": "STRING",
+                "description": "Optional specific metric: 'battery', 'cpu', 'ram', 'temp', or 'all'",
+            },
+        },
+    },
+    "handler": system_diagnostics,
+}
+

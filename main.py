@@ -769,6 +769,11 @@ class JarvisLive:
             self.ui.set_state("LISTENING")
         self.ui.write_log(f"SYS: Awake — {reason}.")
         try:
+            from core.audio_effects import play_wake_chime
+            play_wake_chime()
+        except Exception:
+            pass
+        try:
             self.ui.bring_to_front()
         except Exception:
             pass
@@ -780,6 +785,11 @@ class JarvisLive:
         self.set_speaking(False)
         self.ui.set_state("SLEEPING")
         self.ui.write_log(f"SYS: Sleeping — {reason}. Say 'Hey Jarvis' to wake me.")
+        try:
+            from core.audio_effects import play_standby_tone
+            play_standby_tone()
+        except Exception:
+            pass
 
     async def _run_sleep_watch(self) -> None:
         """Auto-sleep after the configured silence window (wake-word mode only)."""
@@ -1317,6 +1327,11 @@ class JarvisLive:
 
         print(f"[JARVIS] 🔧 {name}  {args}")
         self.ui.set_state("THINKING")
+        try:
+            from core.audio_effects import play_action_blip
+            play_action_blip()
+        except Exception:
+            pass
 
 
         if name == "save_memory":
@@ -1480,6 +1495,11 @@ class JarvisLive:
             self.ui.set_state("LISTENING")
 
         print(f"[JARVIS] 📤 {name} → {str(result)[:80]}")
+        try:
+            from core.audio_effects import play_success_chord
+            play_success_chord()
+        except Exception:
+            pass
 
         # A tool that declared itself NON_BLOCKING also says when its answer may
         # re-enter the conversation. Without this the model finishes whatever it
